@@ -1,6 +1,6 @@
 import unittest
 
-from ci.registry import Registry, Unknown, split_image
+from ci.registry import Registry, RegistryError, Unknown, split_image
 from ci.tests.fake_registry import FakeRegistry
 
 
@@ -53,6 +53,27 @@ class AnonymousTest(unittest.TestCase):
         reg = Registry(self.fake.host, user="x", password="secret", insecure=True)
         self.assertTrue(reg.exists("blsq/openclinic-config/mr", "1.2.0"))
         self.assertFalse(reg.anonymous_pull("blsq/openclinic-config/mr", "1.2.0"), "private, as far as a site can tell")
+
+
+class RefusedCredentialTest(unittest.TestCase):
+    """An expired or wrong token must never read as 'not published': T1 would check nothing."""
+
+    def setUp(self):
+        self.fake = FakeRegistry(deny_every_token=True)
+        self.fake.put_image("blsq/openclinic-config/mr", "1.2.0", {})
+
+    def tearDown(self):
+        self.fake.close()
+
+    def test_a_refused_credential_is_an_error(self):
+        reg = Registry(self.fake.host, user="x", password="expired", insecure=True)
+        self.assertRaises(RegistryError, reg.exists, "blsq/openclinic-config/mr", "1.2.0")
+        try:
+            reg.exists("blsq/openclinic-config/mr", "1.2.0")
+        except Unknown:
+            self.fail("Unknown is the anonymous caller's, not a refused credential's")
+        except RegistryError:
+            pass
 
 
 if __name__ == "__main__":

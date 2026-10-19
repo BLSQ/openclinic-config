@@ -31,6 +31,22 @@ class LayoutTest(unittest.TestCase):
             write_package(root, "ci/tests/repos/x/countries/zz", "zz", "country")
             self.assertEqual(6, len(repo.load(root).packages))
 
+    def test_L1_a_package_in_the_tooling_or_the_workflows(self):
+        with TempRepo() as root:
+            good(root)
+            write_package(root, "ci", "x", "layer")
+            write_package(root, ".github", "y", "layer")
+            self.assertEqual(["L1"], rules(root))
+            self.assertEqual(8, len(repo.load(root).packages))
+
+    def test_a_symbolic_link_is_refused(self):
+        with TempRepo() as root:
+            good(root)
+            os.symlink("../../../README.md", os.path.join(root, "shared", "demo", "notes.md"))
+            problems = layout.check(repo.load(root))
+            self.assertEqual(["L0"], [p.rule for p in problems])
+            self.assertIn("symbolic link", problems[0].message)
+
     def test_L1_a_package_elsewhere(self):
         with TempRepo() as root:
             good(root)

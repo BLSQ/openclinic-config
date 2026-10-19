@@ -11,8 +11,8 @@ from .semver import Version
 MANIFEST = "package.yaml"
 COUNTRIES = "countries"
 SHARED = "shared"
-# Directories of the repository that are not packages, and whose package.yaml files are fixtures.
-NOT_PACKAGES = ("ci", ".git", ".github")
+# What is not searched for packages: git's own directory, and the tooling's fixtures (L1).
+NOT_PACKAGES = (".git", "ci/tests")
 
 
 @dataclass
@@ -94,9 +94,15 @@ def _read_files(directory):
     files = {}
     for dirpath, dirnames, filenames in os.walk(directory):
         dirnames.sort()
+        for d in dirnames:
+            if os.path.islink(os.path.join(dirpath, d)):
+                raise ValueError(f"{os.path.relpath(os.path.join(dirpath, d), directory)} is a symbolic link: a package holds files only")
         for f in sorted(filenames):
             full = os.path.join(dirpath, f)
-            if os.path.isfile(full) and not os.path.islink(full):
+            if os.path.islink(full):
+                # config apply and the image would follow it, this hash would not; and it may point outside
+                raise ValueError(f"{os.path.relpath(full, directory)} is a symbolic link: a package holds files only")
+            if os.path.isfile(full):
                 rel = os.path.relpath(full, directory).replace(os.sep, "/")
                 with open(full, "rb") as fh:
                     files[rel] = fh.read()
@@ -138,10 +144,10 @@ def manifests(root):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        dirnames[:] = sorted(d for d in dirnames
+                             if (d if rel == "." else f"{rel}/{d}") not in NOT_PACKAGES)
         if rel == ".":
-            dirnames[:] = sorted(d for d in dirnames if d not in NOT_PACKAGES and not d.startswith("."))
             continue
-        dirnames.sort()
         if MANIFEST in filenames:
             found.append(rel)
     return sorted(found)

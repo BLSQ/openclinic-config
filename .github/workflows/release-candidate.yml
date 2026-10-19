@@ -40,13 +40,19 @@ jobs:
           else echo "Nothing above the pinned release candidate." >> "$GITHUB_STEP_SUMMARY"; fi
       - name: config lint
         if: steps.image.outputs.image != ''
-        run: python3 -m ci lint --image "${{ steps.image.outputs.image }}"
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: python3 -m ci lint --image "$IMAGE"
       - name: Replay
         if: steps.image.outputs.image != ''
-        run: python3 -m ci replay --image "${{ steps.image.outputs.image }}" --keep replay-reports
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: python3 -m ci replay --image "$IMAGE" --keep replay-reports
       - name: The pin can move
         if: success() && steps.image.outputs.image != ''
-        run: echo "Every package passes on ${{ steps.image.outputs.image }}; openclinic.yaml can move to it." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: echo "Every package passes on $IMAGE; openclinic.yaml can move to it." >> "$GITHUB_STEP_SUMMARY"
       - name: The reports
         if: always() && steps.image.outputs.image != ''
         uses: actions/upload-artifact@v4

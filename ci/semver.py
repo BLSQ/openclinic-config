@@ -26,6 +26,9 @@ class Version:
         pre = tuple(m.group(4).split(".")) if m.group(4) else ()
         if any(p == "" for p in pre):
             raise ValueError(f"'{text}' has an empty pre-release identifier")
+        if any(len(p) > 1 and p.isdigit() and p.startswith("0") for p in pre):
+            # config apply would read rc.01 and rc.1 as one version; semver 2.0 forbids the zero
+            raise ValueError(f"'{text}' has a numeric pre-release identifier with a leading zero")
         return cls(int(m.group(1)), int(m.group(2)), int(m.group(3)), pre)
 
     def release(self):

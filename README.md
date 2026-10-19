@@ -22,7 +22,8 @@ ci/                      the tooling, and its tests
 
 | | Rule |
 |---|---|
-| L1 | A package lives at `countries/<c>/<name>/` or `shared/<name>/`. |
+| L0 | A manifest is readable, its version a semantic version (no leading zero in a numeric pre-release identifier), and a package holds files only, never a symbolic link. |
+| L1 | A package lives at `countries/<c>/<name>/` or `shared/<name>/`; a `package.yaml` anywhere else, `ci/tests/` excepted, is refused. |
 | L2 | Its directory is its `name`. |
 | L3 | A name is unique in the repository, and is neither `countries` nor `shared`. |
 | L4 | `countries/<c>/` holds the country package `c`, at `countries/<c>/<c>/`, and a country package lives nowhere else. |

@@ -149,11 +149,15 @@ def main(root, args):
             continue
         build(root, a, args.registry, args.namespace, rev)
         ref = f"{args.namespace}/{a.package.name}"
+        registry.forget(ref)
         why = differs(repo, a.package, registry.labels(ref, a.package.version_text))
         if why:
             print(f"publish: {a.package.name}: pushed, and reads back wrong: {why}", file=sys.stderr)
             return 1
-        if not args.no_public_check and not registry.anonymous_pull(ref, a.package.version_text):
+    # every package, the ones published by an earlier run included: a run that failed here once must
+    # not pass the next time because the tag now exists
+    for a in actions:
+        if not args.no_public_check and not registry.anonymous_pull(f"{args.namespace}/{a.package.name}", a.package.version_text):
             private.append(a.package.name)
     if private:
         print("publish: pushed, and not pullable without a token, which is how every site pulls: "

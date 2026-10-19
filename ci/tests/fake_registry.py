@@ -8,10 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class FakeRegistry:
 
-    def __init__(self, deny_anonymous_token=False, require_token=True):
+    def __init__(self, deny_anonymous_token=False, require_token=True, deny_every_token=False):
         self.repos = {}            # repository -> {"manifests": {ref: (mediatype, bytes)}, "blobs": {digest: bytes}}
         self.deny_anonymous_token = deny_anonymous_token
         self.require_token = require_token
+        self.deny_every_token = deny_every_token
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.host = f"127.0.0.1:{self.server.server_address[1]}"
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -64,7 +65,7 @@ class FakeRegistry:
             def do_GET(self):
                 if self.path.startswith("/token"):
                     auth = self.headers.get("Authorization", "")
-                    if reg.deny_anonymous_token and not auth.startswith("Basic "):
+                    if reg.deny_every_token or (reg.deny_anonymous_token and not auth.startswith("Basic ")):
                         return self._send(403, b'{"errors":[{"code":"DENIED"}]}')
                     return self._send(200, b'{"token":"t0k3n"}')
                 if reg.require_token and self.headers.get("Authorization") != "Bearer t0k3n":

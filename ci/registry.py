@@ -53,8 +53,10 @@ class Registry:
                 body = json.load(r)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
-                raise Unknown(f"{self.host}/{repository}: the registry refuses a token"
-                              + ("" if self.password else " to an anonymous caller")) from None
+                if self.password:
+                    # a credential refused says nothing about the tag: never read it as "not published"
+                    raise RegistryError(f"{self.host}/{repository}: the registry refuses the credential given ({e.code})") from None
+                raise Unknown(f"{self.host}/{repository}: the registry refuses a token to an anonymous caller") from None
             raise RegistryError(f"{self.host}: the token endpoint answers {e.code}") from None
         return body.get("token") or body.get("access_token")
 
@@ -87,6 +89,8 @@ class Registry:
         if status == 404:
             return False
         if status in (401, 403):
+            if self.password:
+                raise RegistryError(f"{self.host}/{repository}:{tag}: the registry answers {status} to the credential given")
             raise Unknown(f"{self.host}/{repository}:{tag}: the registry answers {status}")
         raise RegistryError(f"{self.host}/{repository}:{tag}: the registry answers {status}")
 
@@ -135,6 +139,10 @@ class Registry:
             m = re.search(r"<([^>]+)>", link)
             path = m.group(1).split(f"/v2/{repository}/", 1)[-1] if m else None
         return out
+
+    def forget(self, repository):
+        """Drops the token cached for a repository: one taken before a push may not read what it pushed."""
+        self._tokens.pop(repository, None)
 
     def anonymous_pull(self, repository, tag):
         try:

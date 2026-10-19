@@ -20,7 +20,7 @@ class VersionTest(unittest.TestCase):
         self.assertEqual("0.1.0-rc.4", str(v("0.1.0-rc.4")))
 
     def test_refuses_what_is_not_a_version(self):
-        for text in ("1.2", "v1.2.3", "01.2.3", "1.2.3-", "", None, "1.2.3-a..b"):
+        for text in ("1.2", "v1.2.3", "01.2.3", "1.2.3-", "", None, "1.2.3-a..b", "1.0.0-rc.01"):
             with self.subTest(text=text):
                 self.assertRaises(ValueError, Version.parse, text)
 

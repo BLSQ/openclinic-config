@@ -68,6 +68,30 @@ class PlanTest(unittest.TestCase):
                 publish.build = original
             self.assertEqual([], built)
 
+    def test_a_skipped_package_still_has_to_be_public(self):
+        # a first run fails on a private package; the next one finds the tag and skips it, and must fail again
+        with TempRepo() as root:
+            fixture(root)
+            r = repo.load(root)
+            private = FakeRegistry(deny_anonymous_token=True)
+            try:
+                for p in r.packages:
+                    labels = {publish.LABEL_HASH: p.content_hash()}
+                    if p.level == "type":
+                        labels[publish.LABEL_BASE] = "mr:1.2.0"
+                    private.put_image(f"{NS}/{p.name}", p.version_text, labels)
+                import os
+                os.environ["REGISTRY_TOKEN"] = "secret"
+                try:
+                    args = argparse.Namespace(registry=private.host, namespace=NS, insecure=True, dry_run=False, no_public_check=False)
+                    self.assertEqual(1, publish.main(root, args))
+                    args.no_public_check = True
+                    self.assertEqual(0, publish.main(root, args))
+                finally:
+                    del os.environ["REGISTRY_TOKEN"]
+            finally:
+                private.close()
+
     def test_the_dockerfile(self):
         self.assertEqual("FROM scratch\nARG NAME\nCOPY ${NAME}/ /${NAME}/\n", publish.dockerfile(None))
         self.assertTrue(publish.dockerfile("ghcr.io/x/mr:1.2.0").startswith("FROM ghcr.io/x/mr:1.2.0\n"))

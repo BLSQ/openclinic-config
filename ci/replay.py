@@ -118,7 +118,7 @@ def explain(report):
     return "\n".join(l for l in lines if l.strip())
 
 
-def apply_twice(db, image, version, root, stack, out):
+def apply_twice(db, image, version, root, stack, out, index=0):
     """@return None when the stack passes, or why it fails."""
     work = tempfile.mkdtemp(prefix="stack-", dir=db.work)
     stage, reports = os.path.join(work, "packages"), os.path.join(work, "reports")
@@ -140,11 +140,13 @@ def apply_twice(db, image, version, root, stack, out):
             got, report = outcome(os.path.join(reports, f"{run}.json"))
             if r.returncode != 0 or got != expected:
                 return f"the {run} run: exit {r.returncode}, outcome {got}, expected exit 0 and {expected}\n{explain(report)}"
+            if run == "second" and any((report.get("written") or {}).values()):
+                return f"the second run wrote fields: {report.get('written')}\n{explain(report)}"
         return None
     finally:
         db.stop()
         if out:
-            shutil.copytree(reports, os.path.join(out, slug(stack.name)), dirs_exist_ok=True)
+            shutil.copytree(reports, os.path.join(out, f"{index:02d}-{slug(stack.name)}"), dirs_exist_ok=True)
 
 
 def run(root, image, keep=None):
@@ -166,9 +168,9 @@ def run(root, image, keep=None):
     eligible, waiting = {}, []
     for p in r.packages:
         try:
-            ok = p.requires is not None and Range.parse(p.requires).includes(release)
+            ok = p.requires is None or Range.parse(p.requires).includes(release)
         except ValueError:
-            ok = True    # malformed: config apply refuses it, with its own words
+            ok = True    # missing or malformed: config apply refuses it, with its own words
         eligible[p.name] = ok
         if not ok:
             waiting.append(f"{p.name} {p.version_text} requires {p.requires}: not replayed on {release} (candidate {candidate})")
@@ -188,9 +190,9 @@ def run(root, image, keep=None):
             started = time.time()
             db.create()
             print(f"replay: the seed loaded and migrated in {time.time() - started:.0f} s")
-            for s in planned:
+            for i, s in enumerate(planned, 1):
                 t = time.time()
-                why = apply_twice(db, image, str(release), root, s, keep)
+                why = apply_twice(db, image, str(release), root, s, keep, i)
                 status = "ok" if why is None else "FAILED"
                 print(f"replay: {status:6} {s.name}  [{s.describe()}]  {time.time() - t:.0f} s")
                 if why:
