@@ -1,0 +1,4 @@
+apiVersion: openclinic/v1alpha1
+kind: Config
+keys:
+  test.sp5.country: "موريتانيا"

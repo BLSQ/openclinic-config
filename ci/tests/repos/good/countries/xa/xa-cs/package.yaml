@@ -1,0 +1,9 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: xa-cs
+title: xa-cs, a fixture of ci/tests/replay.sh
+version: 0.3.1
+level: type
+base: xa
+requires:
+  openclinic: '>=0.1.0'
