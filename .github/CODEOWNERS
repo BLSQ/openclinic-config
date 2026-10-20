@@ -6,3 +6,29 @@
 # country). `python3 -m ci layout` warns about a country directory without its own line.
 # /countries/bi/  @BLSQ/openclinic-config-bi
 /countries/bi/     @plmercereau
+/countries/al/     @plmercereau
+/countries/bd/     @plmercereau
+/countries/be/     @plmercereau
+/countries/bf/     @plmercereau
+/countries/bj/     @plmercereau
+/countries/br/     @plmercereau
+/countries/cd/     @plmercereau
+/countries/cg/     @plmercereau
+/countries/ci/     @plmercereau
+/countries/cm/     @plmercereau
+/countries/et/     @plmercereau
+/countries/ga/     @plmercereau
+/countries/gm/     @plmercereau
+/countries/gn/     @plmercereau
+/countries/ke/     @plmercereau
+/countries/lk/     @plmercereau
+/countries/mg/     @plmercereau
+/countries/ml/     @plmercereau
+/countries/ne/     @plmercereau
+/countries/ng/     @plmercereau
+/countries/pe/     @plmercereau
+/countries/rw/     @plmercereau
+/countries/sn/     @plmercereau
+/countries/tz/     @plmercereau
+/countries/ug/     @plmercereau
+/countries/zm/     @plmercereau

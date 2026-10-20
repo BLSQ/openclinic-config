@@ -1,0 +1,8 @@
+apiVersion: "openclinic/v1alpha1"
+kind: "Package"
+name: "ke"
+title: "Kenya: the settings of setup.xml's section"
+version: "1.0.0"
+level: "country"
+requires:
+  openclinic: ">=0.2.0"
