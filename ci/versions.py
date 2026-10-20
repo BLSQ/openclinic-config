@@ -55,10 +55,16 @@ def compare(base, head):
 
 def load_ref(git_dir, ref):
     """The repository as it stands at a git ref, read from `git archive` into a temporary directory."""
-    tar = subprocess.run(["git", "-C", git_dir, "archive", "--format=tar", ref],
-                         check=True, capture_output=True).stdout
     tmp = tempfile.mkdtemp(prefix="openclinic-config-base-")
     atexit.register(shutil.rmtree, tmp, True)
+    files = subprocess.run(["git", "-C", git_dir, "ls-tree", "-r", "--name-only", ref],
+                           check=True, capture_output=True, text=True).stdout
+    if not files.strip():
+        # an empty tree, as the repository's first main is: git archive writes a pax header and no
+        # entry, which tarfile refuses, and there is nothing to read anyway
+        return repo_mod.load(tmp)
+    tar = subprocess.run(["git", "-C", git_dir, "archive", "--format=tar", ref],
+                         check=True, capture_output=True).stdout
     with tarfile.open(fileobj=io.BytesIO(tar)) as t:
         try:
             t.extractall(tmp, filter="data")

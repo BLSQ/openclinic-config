@@ -69,6 +69,14 @@ class VersionsTest(unittest.TestCase):
     def test_a_new_package(self):
         self.assertEqual([], run(lambda b: write_package(b, "shared", "pev", "layer", version="0.0.1"))[0])
 
+    def test_load_ref_reads_an_empty_commit(self):
+        # the repository's first main is one empty commit: its archive is a tar of zero blocks, no entry
+        with TempRepo() as root:
+            git = ["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@t"]
+            subprocess.run(git[:3] + ["init", "-q"], check=True)
+            subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "empty"], check=True)
+            self.assertEqual([], versions.load_ref(root, "HEAD").packages)
+
     def test_load_ref_reads_a_commit(self):
         with TempRepo() as root:
             base_repo(root)
