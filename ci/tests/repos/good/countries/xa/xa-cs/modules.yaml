@@ -1,0 +1,7 @@
+apiVersion: openclinic/v1alpha1
+kind: Modules
+offer:
+- consultation
+- pharmacy
+- lab-results
+- billing

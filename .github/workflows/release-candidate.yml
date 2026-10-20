@@ -1,0 +1,73 @@
+# Every morning, and on demand: when OpenClinic has published a release or a release candidate above
+# the one openclinic.yaml pins, every package is linted and replayed on it, so that OpenClinic hears
+# about a break before its release. Red, it opens an issue (once per candidate); green, its summary
+# says the pin can move, which is a pull request of one line that runs every check (the SP5 spec, §9).
+name: release-candidate
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'An OpenClinic image to replay on instead of the highest published (ghcr.io/blsq/openclinic:<version>)'
+        required: false
+permissions:
+  contents: read
+  packages: read
+  issues: write
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - id: c
+        name: The highest OpenClinic version published
+        run: python3 -m ci candidate
+      - id: image
+        name: The image to replay on
+        env:
+          INPUT: ${{ inputs.image }}
+          FOUND: ${{ steps.c.outputs.image }}
+          NEWER: ${{ steps.c.outputs.newer }}
+        run: |
+          if [ -n "$INPUT" ]; then echo "image=$INPUT" >> "$GITHUB_OUTPUT"
+          elif [ "$NEWER" = true ]; then echo "image=$FOUND" >> "$GITHUB_OUTPUT"
+          else echo "Nothing above the pinned release candidate." >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: config lint
+        if: steps.image.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: python3 -m ci lint --image "$IMAGE"
+      - name: Replay
+        if: steps.image.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: python3 -m ci replay --image "$IMAGE" --keep replay-reports
+      - name: The pin can move
+        if: success() && steps.image.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: echo "Every package passes on $IMAGE; openclinic.yaml can move to it." >> "$GITHUB_STEP_SUMMARY"
+      - name: The reports
+        if: always() && steps.image.outputs.image != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-reports
+          path: replay-reports
+          if-no-files-found: ignore
+      - name: An issue, once per candidate
+        if: failure() && steps.image.outputs.image != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="The packages fail on $IMAGE"
+          if ! gh issue list --state open --search "\"$title\" in:title" --json title --jq '.[].title' | grep -qxF "$title"; then
+            gh issue create --title "$title" --body "config lint or the replay failed on $IMAGE: $RUN. Either a package needs a new version for this release, or OpenClinic broke something its packages relied on (D31)."
+          fi

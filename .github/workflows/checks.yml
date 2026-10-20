@@ -1,0 +1,122 @@
+# Every pull request and every push to main: the layout and version rules, config lint and the
+# replay on the release candidate openclinic.yaml names, and the tooling's own tests. On main, once
+# all four are green, the packages the registry lacks are published. See README.md and the SP5 spec
+# (OpenClinic's docs/superpowers/specs/2026-10-19-packages-repository-design.md).
+name: checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: checks-${{ github.ref }}
+  # a pull request's newer push replaces the older run; a run on main is never cancelled, it may be publishing
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  rules:
+    name: Layout, versions and tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - name: Layout (L1-L8)
+        run: python3 -m ci layout
+      - name: Versions against the base branch (V1-V5)
+        if: github.event_name == 'pull_request'
+        run: python3 -m ci versions --base "origin/${{ github.base_ref }}"
+      - name: No published tag with other content (T1)
+        run: python3 -m ci tags
+
+  lint:
+    name: config lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - name: config lint, from the pinned release candidate
+        run: python3 -m ci lint
+
+  replay:
+    name: Replay on the release candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - name: Every stack applied twice to a fresh database
+        run: python3 -m ci replay --keep replay-reports
+      - name: The reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-reports
+          path: replay-reports
+          if-no-files-found: ignore
+
+  tooling:
+    name: The tooling's own tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - name: Unit tests
+        run: python3 -m unittest discover -s ci/tests -t .
+      - name: Publishing, end to end, on a local registry
+        run: ci/tests/publish.sh
+      - name: lint and the replay, end to end, on the fixture repositories
+        run: ci/tests/replay.sh
+
+  publish:
+    name: Publish
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [rules, lint, replay, tooling]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r ci/requirements.txt
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push what the registry lacks, amd64 and arm64
+        env:
+          # the images' org.opencontainers.image.source: ghcr.io links a new package to this repository
+          # by it, which is what lets this workflow's token write to the package afterwards
+          OC_SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: python3 -m ci publish

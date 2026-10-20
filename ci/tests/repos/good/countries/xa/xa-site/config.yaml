@@ -1,0 +1,4 @@
+apiVersion: openclinic/v1alpha1
+kind: Config
+keys:
+  test.sp5.facility: CS de Xanadu-Ville

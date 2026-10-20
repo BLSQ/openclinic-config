@@ -1,0 +1,8 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: cnam
+title: cnam, a fixture of ci/tests/replay.sh
+version: 1.0.0
+level: layer
+requires:
+  openclinic: '>=0.1.0'
