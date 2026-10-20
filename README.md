@@ -55,7 +55,7 @@ published tag never changes.
 |---|---|
 | Layout, versions and tags | L1-L8, V1-V5 against the base branch, T1 against the registry |
 | config lint | `config lint` from the pinned image: every package against its schemas and the closed lists, every pair of layers merged |
-| Replay on the release candidate | every package applied twice to a fresh database of the pinned image, in the smallest stacks a site could receive it in and in each base with all its layers: the first run must apply, the second must change nothing |
+| Replay on the release candidate | every package applied twice to a fresh database of the pinned image, in the smallest stacks a site could receive it in and in each base with all its layers: the first run must apply, the second must change nothing; between the two, `config export` of the stack against itself must give nothing back (the round trip: what the packages say came back unchanged) |
 | The tooling's own tests | `ci/tests` |
 
 On `main`, once all four are green, the job **Publish** builds and pushes each package whose tag the
@@ -84,7 +84,7 @@ python3 -m ci replay --keep /tmp/reports # a few minutes: the seed, then ten sec
 python3 -m ci publish --dry-run          # what would be built
 python3 -m unittest discover -s ci/tests -t .
 ci/tests/publish.sh                      # a local registry and a BuildKit builder
-ci/tests/replay.sh                       # OC_TEST_IMAGE=<an image with the config command>
+ci/tests/replay.sh                       # OC_TEST_IMAGE=<an image with config apply, lint and export>
 ```
 
 The tooling never reads what a package says: it places, versions, replays and publishes packages.
@@ -97,7 +97,8 @@ Everything a package means is `config lint`'s and `config apply`'s, in OpenClini
   (its settings, *Change visibility*), once per package. Until then the job **Publish** fails after
   pushing it, naming it.
 - **`openclinic.yaml` names an OpenClinic release that carries the `config` command** (OpenClinic's
-  SP1); the checks say so in one line when it does not.
+  SP1); the checks say so in one line when it does not. Without `config export` (SP4) the replay
+  says the round trip awaits a release that has it, and runs the rest.
 
 ## Contributing
 

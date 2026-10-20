@@ -1,5 +1,7 @@
 """The replay on the release candidate (the spec, §7): every stack of the repository applied twice
-to a fresh database of the pinned image, as the chart would apply it."""
+to a fresh database of the pinned image, as the chart would apply it, and exported against itself
+in between when the image has `config export` (the round trip, §7.4)."""
+import itertools
 import json
 import os
 import re
@@ -118,8 +120,69 @@ def explain(report):
     return "\n".join(l for l in lines if l.strip())
 
 
-def apply_twice(db, image, version, root, stack, out, index=0):
-    """@return None when the stack passes, or why it fails."""
+def export_available(returncode, output):
+    """`config export` with no option is a usage error (exit 2) on an image that has it, and an
+    unknown command on one built before SP4, which exits 2 too (the spec, §7.4)."""
+    return returncode == 2 and "unknown command" not in output
+
+
+def has_export(image):
+    r = docker.run(["run", "--rm", "-e", "DB_HOST=db", "-e", "DB_USER=openclinic", "-e", "DB_PASSWORD=0pen",
+                    image, "config", "export"], check=False, capture=True, quiet=True)
+    docker.check_config_command(image, r)
+    return export_available(r.returncode, r.stdout + r.stderr)
+
+
+def probe_name(stack):
+    """The name the round trip exports under: a site package's, and one the stack does not hold,
+    since an export leaves the package of its own name out of the reference."""
+    names = {p.name for p in stack.packages()}
+    return next(n for n in ("round-trip" + (f"-{i}" if i else "") for i in itertools.count()) if n not in names)
+
+
+def round_trip_verdict(returncode, report, exported_dir):
+    """@return None when the export of a stack against itself gave nothing back, or why it did.
+    What it names for a reason of its own (a seed's codeless row, a half-on module) is not the
+    stack's doing; a value another level set and the database does not hold is."""
+    got = report.get("run", {}).get("outcome")
+    if returncode != 0 or got != "written":
+        return f"the round trip: config export exit {returncode}, outcome {got}, expected exit 0 and written\n{explain(report)}"
+    files = (report.get("package") or {}).get("files") or {}
+    disagree = [n for n in report.get("named") or [] if n.get("reason") == "another level"]
+    if not files and not disagree:
+        return None
+    lines = ["the round trip: the stack exported against itself is not empty: the database holds what the stack does not say"]
+    for name, count in sorted(files.items()):
+        lines.append(f"    {name}: {count} element(s)")
+        try:
+            with open(os.path.join(exported_dir, name), encoding="utf-8", errors="replace") as f:
+                content = f.read().splitlines()
+        except OSError:
+            continue
+        lines += [f"      {l}" for l in content[:20]] + ([f"      … {len(content) - 20} more line(s)"] if len(content) > 20 else [])
+    for n in disagree[:20]:
+        lines.append(f"    {n.get('kind')} {n.get('element')} {n.get('field')}: the database holds '{n.get('value')}' — {n.get('detail')}")
+    return "\n".join(lines)
+
+
+def round_trip(db, image, version, stage, reports, stack):
+    """The spec's §7.4: after the first run, `config export` of the stack against itself, which must
+    give back nothing: what the packages say came back unchanged."""
+    probe = probe_name(stack)
+    r = docker.run(["run", "--rm", "--network", db.network] + db.env()
+                   + ["-e", f"OPENCLINIC_VERSION={version}", "-v", f"{stage}:/packages:ro", "-v", f"{reports}:/report",
+                      image, "config", "export", "--name", probe, "--level", "site", "--version", "0.0.0",
+                      "--out", "/report/round-trip", "--report", "/report/round-trip.json", "/packages"],
+                   check=False, capture=True, quiet=True)
+    with open(os.path.join(reports, "round-trip.log"), "w") as f:
+        f.write(r.stdout + r.stderr)
+    _, report = outcome(os.path.join(reports, "round-trip.json"))
+    return round_trip_verdict(r.returncode, report, os.path.join(reports, "round-trip", probe))
+
+
+def apply_twice(db, image, version, root, stack, out, index=0, export=False):
+    """@return None when the stack passes, or why it fails. With `export`, the round trip runs
+    between the two runs."""
     work = tempfile.mkdtemp(prefix="stack-", dir=db.work)
     stage, reports = os.path.join(work, "packages"), os.path.join(work, "reports")
     stacks_mod.stage(root, stack, stage)
@@ -142,6 +205,10 @@ def apply_twice(db, image, version, root, stack, out, index=0):
                 return f"the {run} run: exit {r.returncode}, outcome {got}, expected exit 0 and {expected}\n{explain(report)}"
             if run == "second" and any((report.get("written") or {}).values()):
                 return f"the second run wrote fields: {report.get('written')}\n{explain(report)}"
+            if run == "first" and export:
+                why = round_trip(db, image, version, stage, reports, stack)
+                if why:
+                    return why
         return None
     finally:
         db.stop()
@@ -182,6 +249,9 @@ def run(root, image, keep=None):
         print(f"replay: no stack to replay on {image}")
         return 0
     print(f"replay: {len(planned)} stack(s) on {image}, requires checked against {release}")
+    export = has_export(image)
+    print("replay: the round trip, every stack exported against itself after its first run" if export
+          else f"replay: the round trip awaits a release with config export (SP4): {image} has none")
     failures = 0
     with tempfile.TemporaryDirectory(prefix="openclinic-config-replay-", ignore_cleanup_errors=True) as work:
         os.chmod(work, 0o755)
@@ -192,7 +262,7 @@ def run(root, image, keep=None):
             print(f"replay: the seed loaded and migrated in {time.time() - started:.0f} s")
             for i, s in enumerate(planned, 1):
                 t = time.time()
-                why = apply_twice(db, image, str(release), root, s, keep, i)
+                why = apply_twice(db, image, str(release), root, s, keep, i, export)
                 status = "ok" if why is None else "FAILED"
                 print(f"replay: {status:6} {s.name}  [{s.describe()}]  {time.time() - t:.0f} s")
                 if why:
