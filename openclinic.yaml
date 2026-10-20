@@ -1,4 +1,4 @@
 # The OpenClinic release candidate every package is linted and replayed on (the SP5 spec, §9).
 # Moving it is a pull request of one line, which runs every check on the new candidate.
 # It must carry the `config` command: none of 0.1.0-rc.1 to 0.1.0-rc.4 does.
-image: ghcr.io/blsq/openclinic:0.2.0-rc.1
+image: ghcr.io/blsq/openclinic:0.2.0-rc.2
