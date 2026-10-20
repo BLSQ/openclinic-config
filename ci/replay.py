@@ -169,6 +169,13 @@ def round_trip(db, image, version, stage, reports, stack):
     """The spec's §7.4: after the first run, `config export` of the stack against itself, which must
     give back nothing: what the packages say came back unchanged."""
     probe = probe_name(stack)
+    # created here, open to every user: the container (uid 1000, umask 077) would create them 0700,
+    # which the runner, another uid, can neither copy with --keep nor delete; inside a directory the
+    # runner owns, the tool's chmod fails quietly and the files it writes stay removable
+    exported = os.path.join(reports, "round-trip", probe)
+    os.makedirs(exported)
+    for d in (os.path.dirname(exported), exported):
+        os.chmod(d, 0o777)
     r = docker.run(["run", "--rm", "--network", db.network] + db.env()
                    + ["-e", f"OPENCLINIC_VERSION={version}", "-v", f"{stage}:/packages:ro", "-v", f"{reports}:/report",
                       image, "config", "export", "--name", probe, "--level", "site", "--version", "0.0.0",
@@ -177,7 +184,7 @@ def round_trip(db, image, version, stage, reports, stack):
     with open(os.path.join(reports, "round-trip.log"), "w") as f:
         f.write(r.stdout + r.stderr)
     _, report = outcome(os.path.join(reports, "round-trip.json"))
-    return round_trip_verdict(r.returncode, report, os.path.join(reports, "round-trip", probe))
+    return round_trip_verdict(r.returncode, report, exported)
 
 
 def apply_twice(db, image, version, root, stack, out, index=0, export=False):
