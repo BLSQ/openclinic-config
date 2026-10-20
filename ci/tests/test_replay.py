@@ -12,6 +12,29 @@ def report(outcome="written", files=None, named=None):
             "named": named or [], "problems": []}
 
 
+class EligibilityTest(unittest.TestCase):
+
+    def packages(self, **requires):
+        with TempRepo() as root:
+            for name, req in requires.items():
+                write_package(root, "shared", name, "layer", requires=req)
+            return repo.load(root).packages
+
+    def test_requires_is_checked_against_the_release_and_the_candidate_is_named(self):
+        pkgs = self.packages(release=">=0.2.0", candidate=">=0.2.0-rc.2", later=">=0.3.0", older=">=0.1.0 <0.2.0")
+        eligible, notes = replay.eligibility(pkgs, "0.2.0-rc.2")
+        self.assertEqual({"release": True, "candidate": True, "later": False, "older": False}, eligible)
+        self.assertEqual(["later 1.0.0 requires >=0.3.0: not replayed on 0.2.0 (candidate 0.2.0-rc.2)",
+                          "older 1.0.0 requires >=0.1.0 <0.2.0: not replayed on 0.2.0 (candidate 0.2.0-rc.2)",
+                          "release 1.0.0 requires >=0.2.0: replayed on 0.2.0; a site running the candidate 0.2.0-rc.2 refuses it"],
+                         sorted(notes))
+
+    def test_a_release_names_nothing_it_replays(self):
+        eligible, notes = replay.eligibility(self.packages(release=">=0.2.0"), "0.2.0")
+        self.assertEqual({"release": True}, eligible)
+        self.assertEqual([], notes)
+
+
 class RoundTripTest(unittest.TestCase):
 
     def test_export_is_told_from_an_image_without_it(self):
