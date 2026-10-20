@@ -115,4 +115,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push what the registry lacks, amd64 and arm64
+        env:
+          # the images' org.opencontainers.image.source: ghcr.io links a new package to this repository
+          # by it, which is what lets this workflow's token write to the package afterwards
+          OC_SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
         run: python3 -m ci publish

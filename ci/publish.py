@@ -15,6 +15,7 @@ from .stacks import readable
 
 LABEL_HASH = "be.openclinic.package.contenthash"
 LABEL_BASE = "be.openclinic.package.base"
+# The repository the images come from; the workflow sets it from its own context (checks.yml).
 SOURCE = os.environ.get("OC_SOURCE_URL", "https://github.com/BLSQ/openclinic-config")
 PLATFORMS = "linux/amd64,linux/arm64"
 
