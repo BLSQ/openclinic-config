@@ -5,3 +5,4 @@
 # One line per country, added with the country's first package (the design's D23: a reviewer per
 # country). `python3 -m ci layout` warns about a country directory without its own line.
 # /countries/bi/  @BLSQ/openclinic-config-bi
+/countries/bi/     @plmercereau
