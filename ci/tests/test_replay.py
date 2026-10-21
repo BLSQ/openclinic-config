@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -33,6 +35,79 @@ class EligibilityTest(unittest.TestCase):
         eligible, notes = replay.eligibility(self.packages(release=">=0.2.0"), "0.2.0")
         self.assertEqual({"release": True}, eligible)
         self.assertEqual([], notes)
+
+
+def country_fixture(root, xa_currency="XAF"):
+    write_package(root, "countries/xa", "xa", "country", {"config.yaml": f"apiVersion: openclinic/v1alpha1\nkind: Config\nkeys:\n  currency: {xa_currency}\n"})
+    write_package(root, "countries/xa", "xa-cs", "type", base="xa")
+    write_package(root, "countries/xb", "xb", "country")
+    write_package(root, "shared", "cnam", "layer")
+    write_package(root, "shared", "teyarett", "project")
+
+
+class ScopeTest(unittest.TestCase):
+
+    def repos(self, change):
+        with TempRepo() as base_root, TempRepo() as head_root:
+            country_fixture(base_root)
+            country_fixture(head_root)
+            change(head_root)
+            return repo.load(base_root), repo.load(head_root)
+
+    def names(self, stacks):
+        return sorted(s.name for s in stacks)
+
+    def test_a_type_changed_replays_its_stacks_alone(self):
+        base, head = self.repos(lambda r: write_package(r, "countries/xa", "xa-cs", "type", base="xa", version="0.1.1"))
+        names, why = replay.scope(["countries/xa/xa-cs/package.yaml"], base, head)
+        self.assertEqual(({"xa-cs"}, None), (names, why))
+        self.assertEqual(["xa-cs", "xa-cs + its layers"], self.names(replay.select(stacks.plan(head), names)))
+
+    def test_a_country_changed_replays_its_types_and_its_wide_stacks_too(self):
+        base, head = self.repos(lambda r: country_fixture(r, xa_currency="XAG"))
+        names, _ = replay.scope(["countries/xa/xa/config.yaml"], base, head)
+        self.assertEqual({"xa"}, names)
+        self.assertEqual(["xa", "xa + its layers", "xa-cs", "xa-cs + its layers"], self.names(replay.select(stacks.plan(head), names)))
+
+    def test_a_shared_layer_replays_every_wide_stack(self):
+        base, head = self.repos(lambda r: write_package(r, "shared", "cnam", "layer", version="1.0.1"))
+        names, _ = replay.scope(["shared/cnam/package.yaml"], base, head)
+        self.assertEqual(["xa + its layers", "xa-cs + its layers", "xb + its layers"], self.names(replay.select(stacks.plan(head), names)))
+
+    def test_a_new_package_is_replayed(self):
+        base, head = self.repos(lambda r: write_package(r, "shared", "kanifing", "project"))
+        names, _ = replay.scope(["shared/kanifing/package.yaml"], base, head)
+        self.assertEqual({"kanifing"}, names)
+        self.assertEqual(["kanifing"], self.names(replay.select(stacks.plan(head), names)))
+
+    def test_nothing_of_a_package_changed_replays_nothing(self):
+        base, head = self.repos(lambda r: None)
+        self.assertEqual((set(), None), replay.scope(["README.md", "countries/README.md"], base, head))
+
+    def test_the_pin_the_tooling_the_workflows_or_a_removal_replay_everything(self):
+        base, head = self.repos(lambda r: None)
+        for path in ("openclinic.yaml", "ci/replay.py", ".github/workflows/checks.yml"):
+            self.assertEqual((None, f"{path} changed"), replay.scope([path], base, head))
+        base, head = self.repos(lambda r: shutil.rmtree(os.path.join(r, "shared", "cnam")))
+        self.assertEqual((None, "removed: cnam"), replay.scope(["shared/cnam/package.yaml"], base, head))
+
+    def test_the_paths_are_the_change_against_the_merge_base(self):
+        with tempfile.TemporaryDirectory() as root:
+            git = lambda *a: subprocess.run(["git", "-C", root, "-c", "user.email=t@t", "-c", "user.name=t"] + list(a),
+                                            check=True, capture_output=True)
+            git("init", "-q", "-b", "main")
+            write_package(root, "shared", "cnam", "layer")
+            git("add", "-A"); git("commit", "-q", "-m", "base")
+            git("checkout", "-q", "-b", "pr")
+            write_package(root, "shared", "cnam", "layer", version="1.0.1")
+            git("add", "-A"); git("commit", "-q", "-m", "pr")
+            git("checkout", "-q", "main")
+            write_package(root, "shared", "other", "layer")
+            git("add", "-A"); git("commit", "-q", "-m", "main moved on")
+            git("checkout", "-q", "pr")
+            self.assertEqual(["shared/cnam/package.yaml"], replay.changed_paths(root, "main"))
+            with self.assertRaisesRegex(ValueError, "cannot compare with nowhere"):
+                replay.changed_paths(root, "nowhere")
 
 
 class RoundTripTest(unittest.TestCase):

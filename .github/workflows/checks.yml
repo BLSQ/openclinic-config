@@ -56,15 +56,28 @@ jobs:
   replay:
     name: Replay on the release candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install -r ci/requirements.txt
-      - name: Every stack applied twice to a fresh database
-        run: python3 -m ci replay --keep replay-reports
+      # A pull request replays the stacks holding a package it adds or changes, every stack when it
+      # touches the pin, the tooling or the workflows, or removes a package; main replays every stack
+      # before publishing. Four at a time, the runner's cores (the SP5 spec, §7 and C6).
+      - name: The stacks applied twice to a fresh database
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            python3 -m ci replay --keep replay-reports --jobs 4 --changed-from "origin/$BASE"
+          else
+            python3 -m ci replay --keep replay-reports --jobs 4
+          fi
       - name: The reports
         if: always()
         uses: actions/upload-artifact@v4

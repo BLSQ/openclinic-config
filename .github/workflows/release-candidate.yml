@@ -47,7 +47,7 @@ jobs:
         if: steps.image.outputs.image != ''
         env:
           IMAGE: ${{ steps.image.outputs.image }}
-        run: python3 -m ci replay --image "$IMAGE" --keep replay-reports
+        run: python3 -m ci replay --image "$IMAGE" --keep replay-reports --jobs 4
       - name: The pin can move
         if: success() && steps.image.outputs.image != ''
         env:
