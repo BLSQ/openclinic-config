@@ -64,25 +64,44 @@ def confirmation(text, default):
     return m.group(1) if m else default
 
 
-def signed_in(page):
-    meta = page.locator('meta[name="user-login"]')
-    return meta.count() > 0 and bool((meta.first.get_attribute("content") or "").strip())
+def signed_in(context, github):
+    """Signed in, whichever tab it happened in: GitHub's own cookie `logged_in=yes`, or an open page
+    whose `user-login` meta names someone (a page with no such cookie: the tests' fake)."""
+    try:
+        if any(c.get("name") == "logged_in" and c.get("value") == "yes" for c in context.cookies(github)):
+            return True
+    except Exception:
+        pass
+    for p in context.pages:
+        try:
+            meta = p.locator('meta[name="user-login"]')
+            if meta.count() > 0 and (meta.first.get_attribute("content") or "").strip():
+                return True
+        except Exception:
+            pass                 # a page navigating or closed
+    return False
 
 
-def sign_in(page, github, timeout=LOGIN_TIMEOUT):
+def open_page(context):
+    """A tab still open, the last one the person used, or a new one."""
+    pages = [p for p in context.pages if not p.is_closed()]
+    return pages[-1] if pages else context.new_page()
+
+
+def sign_in(context, github, timeout=LOGIN_TIMEOUT):
+    """Waits for the person to sign in, in any tab of the window; returns a tab to work in."""
+    page = open_page(context)
     page.goto(github + "/")
-    if signed_in(page):
-        return
+    if signed_in(context, github):
+        return page
     page.goto(github + "/login")
     print("make-public: sign in to GitHub in the browser window (an admin of the packages)", flush=True)
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(2)
-        try:
-            if "/login" not in page.url and "/sessions" not in page.url and signed_in(page):
-                return
-        except Exception:
-            pass                 # the page is navigating
+        if signed_in(context, github):
+            print("make-public: signed in", flush=True)
+            return open_page(context)
     raise Step(f"not signed in after {timeout} s")
 
 
@@ -211,8 +230,7 @@ def main(root, args):
         context = pw.chromium.launch_persistent_context(
             profile, headless=args.headless, executable_path=args.browser or None, channel=args.channel or None)
         try:
-            page = context.pages[0] if context.pages else context.new_page()
-            sign_in(page, args.github)
+            page = sign_in(context, args.github)
             left = run(page, todo, args.namespace, args.github, readable)
         except Step as e:
             print(f"make-public: {e}", file=sys.stderr)

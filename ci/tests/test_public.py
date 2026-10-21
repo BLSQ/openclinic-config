@@ -55,7 +55,7 @@ class PlanTest(unittest.TestCase):
 
 # -- the page, driven for real: a settings page laid out as GitHub documents it -------------------
 
-PAGE = """<!doctype html><html><head><meta name="user-login" content="maintainer"><title>{name}</title></head>
+PAGE = """<!doctype html><html><head><meta name="user-login" content="{user}"><title>{name}</title></head>
 <body><h2>Danger Zone</h2>{danger}</body></html>"""
 DANGER = """<button type="button" onclick="document.getElementById('v').showModal()">Change visibility</button>
 <dialog id="v" aria-label="Change package visibility"><form method="post" action="{action}">
@@ -70,9 +70,10 @@ DANGER = """<button type="button" onclick="document.getElementById('v').showModa
 class FakeGitHub(http.server.ThreadingHTTPServer):
     """Each package's settings page; `missing` ones show no Danger Zone button (a page that changed)."""
 
-    def __init__(self, missing=(), styled=False):
+    def __init__(self, missing=(), styled=False, anonymous=False):
         super().__init__(("127.0.0.1", 0), Handler)
         self.public, self.missing, self.posts, self.styled = set(), set(missing), [], styled
+        self.user = "" if anonymous else "maintainer"       # anonymous: the pages name nobody
         self.url = f"http://127.0.0.1:{self.server_port}"
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
@@ -99,14 +100,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         name = self.full_name()
         if self.path == "/":
-            return self.send(200, PAGE.format(name="home", danger="").encode())
+            return self.send(200, PAGE.format(name="home", danger="", user=self.server.user).encode())
+        if self.path == "/login":                              # GitHub's sign-in page names nobody
+            return self.send(200, PAGE.format(name="Sign in", danger="", user="").encode())
         if name is None or not self.path.endswith("/settings"):
             return self.send(404)
         danger = "" if name in self.server.missing else DANGER.format(
             action=html.escape(self.path.replace("/settings", "/visibility")), name=html.escape(name))
         if self.server.styled:                                 # the inputs hidden, their labels drawn
             danger = danger.replace('type="radio"', 'type="radio" style="display:none"')
-        self.send(200, PAGE.format(name=html.escape(name), danger=danger).encode())
+        self.send(200, PAGE.format(name=html.escape(name), danger=danger, user=self.server.user).encode())
 
     def do_POST(self):
         name = self.full_name()
@@ -137,8 +140,7 @@ class PageTest(unittest.TestCase):
         with sync_playwright() as pw:
             b = pw.chromium.launch(headless=True, executable_path=executable)
             try:
-                page = b.new_page()
-                public.sign_in(page, github.url, timeout=5)
+                page = public.sign_in(b.new_context(), github.url, timeout=5)
                 return public.run(page, packages, NS, github.url,
                                   lambda name, version: name in github.public, ask=ask)
             finally:
@@ -155,6 +157,29 @@ class PageTest(unittest.TestCase):
             name, form = github.posts[0]
             self.assertEqual(["public"], form["visibility"])
             self.assertEqual([name], form["verify"])            # the name the dialog asked for
+        finally:
+            github.shutdown()
+            github.server_close()
+
+    def test_the_sign_in_is_github_s_cookie_whatever_the_page_shows(self):
+        github = FakeGitHub(anonymous=True)
+        sync_playwright, executable = browser()
+        try:
+            with sync_playwright() as pw:
+                b = pw.chromium.launch(headless=True, executable_path=executable)
+                try:
+                    context = b.new_context()
+                    with self.assertRaisesRegex(public.Step, "not signed in after 2 s"):
+                        public.sign_in(context, github.url, timeout=2)
+                    context.add_cookies([{"name": "logged_in", "value": "no", "url": github.url}])
+                    with self.assertRaisesRegex(public.Step, "not signed in"):
+                        public.sign_in(context, github.url, timeout=2)
+                    # signed in in another tab: the cookie says so, the first tab still shows nobody
+                    context.add_cookies([{"name": "logged_in", "value": "yes", "url": github.url}])
+                    page = public.sign_in(context, github.url, timeout=2)
+                    self.assertFalse(page.is_closed())
+                finally:
+                    b.close()
         finally:
             github.shutdown()
             github.server_close()
