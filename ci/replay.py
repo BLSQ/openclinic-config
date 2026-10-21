@@ -223,6 +223,29 @@ def apply_twice(db, image, version, root, stack, out, index=0, export=False):
             shutil.copytree(reports, os.path.join(out, f"{index:02d}-{slug(stack.name)}"), dirs_exist_ok=True)
 
 
+def eligibility(packages, candidate):
+    """The spec's §7.3: `requires` is checked against the release the candidate becomes, and a
+    package it excludes is not replayed. A package the release accepts and the candidate itself
+    does not (`>=0.2.0` on `0.2.0-rc.2`) is replayed all the same, and named: a site running the
+    candidate refuses it, since `config apply` checks its own version (seen on k3s, OpenClinic's
+    Phase 69). Returns {name: replayed} and the lines to print."""
+    version = Version.parse(candidate)
+    release = version.release()
+    eligible, notes = {}, []
+    for p in packages:
+        try:
+            wanted = None if p.requires is None else Range.parse(p.requires)
+        except ValueError:
+            wanted = None    # malformed: config apply refuses it, with its own words
+        eligible[p.name] = wanted is None or wanted.includes(release)
+        if not eligible[p.name]:
+            notes.append(f"{p.name} {p.version_text} requires {p.requires}: not replayed on {release} (candidate {candidate})")
+        elif wanted is not None and not wanted.includes(version):
+            notes.append(f"{p.name} {p.version_text} requires {p.requires}: replayed on {release}; "
+                         f"a site running the candidate {candidate} refuses it")
+    return eligible, notes
+
+
 def run(root, image, keep=None):
     r = repo_mod.load(root)
     if r.problems:
@@ -238,20 +261,11 @@ def run(root, image, keep=None):
         print(f"replay: the image {image} sets no OPENCLINIC_VERSION", file=sys.stderr)
         return 1
     release = Version.parse(candidate).release()
-    # the spec's §7.3: requires is checked against the release the candidate becomes
-    eligible, waiting = {}, []
-    for p in r.packages:
-        try:
-            ok = p.requires is None or Range.parse(p.requires).includes(release)
-        except ValueError:
-            ok = True    # missing or malformed: config apply refuses it, with its own words
-        eligible[p.name] = ok
-        if not ok:
-            waiting.append(f"{p.name} {p.version_text} requires {p.requires}: not replayed on {release} (candidate {candidate})")
+    eligible, notes = eligibility(r.packages, candidate)
     planned = [s.restrict(lambda p: eligible[p.name]) for s in stacks_mod.plan(r)]
     planned = [s for s in planned if s is not None]
-    for w in waiting:
-        print("replay: " + w)
+    for n in notes:
+        print("replay: " + n)
     if not planned:
         print(f"replay: no stack to replay on {image}")
         return 0

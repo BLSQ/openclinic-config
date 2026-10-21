@@ -68,7 +68,10 @@ issue. Moving the pin is then a pull request of one line.
 
 **`requires.openclinic` is checked against the release the candidate becomes**: on
 `0.2.0-rc.1`, a package `>=0.2.0` is replayed, with `OPENCLINIC_VERSION=0.2.0`. A package whose
-range excludes even that is not replayed, and the job says so.
+range excludes even that is not replayed, and the job says so. A package replayed that way and
+refused by the candidate itself is named too: a site *running* `0.2.0-rc.1` refuses `>=0.2.0`
+(a candidate comes before its release, and `config apply` checks its own version), so a pilot on a
+candidate needs `>=0.2.0-rc.1`, or the release.
 
 ## Running the checks
 
