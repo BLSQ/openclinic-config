@@ -9,6 +9,7 @@
                           stacks a change touches; one runner's part
   publish [--dry-run]     build and push what the registry lacks
   candidate               the highest OpenClinic tag, if above the pinned one
+  make-public [<name>...] each package a site cannot pull made public, in a signed-in browser
 
 Every command takes --root <dir> (the checkout, `.` by default) and, where an image is used,
 --image <ref> (openclinic.yaml's by default). Exit 0 passes, 1 is a problem found, 2 a usage error.
@@ -48,6 +49,17 @@ def main(argv=None):
     p.add_argument("--no-public-check", action="store_true", help="skip the anonymous pull after pushing (a local registry)")
     c = sub.add_parser("candidate")
     c.add_argument("--repository", default="ghcr.io/blsq/openclinic")
+    m = sub.add_parser("make-public", help="not for CI: a maintainer's browser session")
+    m.add_argument("names", nargs="*", help="only these packages (every private one by default)")
+    m.add_argument("--registry", default="ghcr.io")
+    m.add_argument("--namespace", default="blsq/openclinic-config")
+    m.add_argument("--github", default="https://github.com")
+    m.add_argument("--profile", default="~/.cache/openclinic-config-github",
+                   help="the browser's profile, which keeps the sign-in between runs")
+    m.add_argument("--channel", help="an installed browser instead of Playwright's Chromium: chrome, msedge")
+    m.add_argument("--browser", help="a Chromium executable, instead of Playwright's own")
+    m.add_argument("--headless", action="store_true", help="no window (tests only: signing in needs one)")
+    m.add_argument("--dry-run", action="store_true", help="list the private packages, open no browser")
     args = ap.parse_args(argv)
     root = os.path.abspath(args.root)
     try:
@@ -82,6 +94,9 @@ def main(argv=None):
         if args.command == "candidate":
             from . import candidate
             return candidate.main(root, args)
+        if args.command == "make-public":
+            from . import public
+            return public.main(root, args)
     except (docker.NoConfigCommand, docker.ImageMissing) as e:
         print(f"{args.command}: {e}", file=sys.stderr)
         return 1

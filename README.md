@@ -100,7 +100,19 @@ Everything a package means is `config lint`'s and `config apply`'s, in OpenClini
 - **Branch protection on `main`**: the four jobs above required, a review by the code owners.
 - **Each package public on ghcr.io**: a package a workflow creates is private until it is made public
   (its settings, *Change visibility*), once per package. Until then the job **Publish** fails after
-  pushing it, naming it.
+  pushing it, naming it. GitHub offers no API for it, so `python3 -m ci make-public` does it in a
+  browser an admin of the packages signs in to: for each package an anonymous caller cannot pull,
+  *Change visibility*, *Public*, the name typed, confirmed, then the anonymous pull checked. A step
+  the page does not offer as expected is left to the person in the open window, and the command
+  waits for them. Then re-run **Publish**.
+
+  ```bash
+  python3 -m venv .venv && . .venv/bin/activate
+  pip install -r ci/requirements.txt playwright
+  python3 -m playwright install chromium   # or pass --channel chrome to use an installed Chrome
+  python3 -m ci make-public --dry-run      # the private packages, no browser
+  python3 -m ci make-public                # sign in once in the window; the profile keeps it
+  ```
 - **`openclinic.yaml` names an OpenClinic release that carries the `config` command** (OpenClinic's
   SP1); the checks say so in one line when it does not. Without `config export` (SP4) the replay
   says the round trip awaits a release that has it, and runs the rest.
