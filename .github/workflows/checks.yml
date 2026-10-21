@@ -73,11 +73,15 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
         run: |
+          nproc; free -g; df -h /var/lib/docker
+          vmstat 15 > vmstat.log 2>&1 &
           if [ "$EVENT" = pull_request ]; then
-            python3 -m ci replay --keep replay-reports --jobs 4 --changed-from "origin/$BASE"
+            python3 -m ci replay --keep replay-reports --jobs 2 --changed-from "origin/$BASE"
           else
             python3 -m ci replay --keep replay-reports --jobs 4
           fi
+          kill %1 || true
+          cat vmstat.log
       - name: The reports
         if: always()
         uses: actions/upload-artifact@v4
