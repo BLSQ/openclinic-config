@@ -2,7 +2,9 @@ apiVersion: "openclinic/v1alpha1"
 kind: "Package"
 name: "rw"
 title: "Rwanda: the settings of setup.xml's section"
-version: "1.0.0"
+version: "1.0.1"
 level: "country"
+selector:
+  country: "rw"
 requires:
   openclinic: ">=0.2.0"

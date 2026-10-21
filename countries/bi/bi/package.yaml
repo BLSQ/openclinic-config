@@ -2,7 +2,9 @@ apiVersion: "openclinic/v1alpha1"
 kind: "Package"
 name: "bi"
 title: "Burundi: the country settings of the reference dump (2026-10-20)"
-version: "1.0.1"
+version: "1.0.2"
 level: "country"
+selector:
+  country: "bi"
 requires:
   openclinic: ">=0.2.0-rc.2"
