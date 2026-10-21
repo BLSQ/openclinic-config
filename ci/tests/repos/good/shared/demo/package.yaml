@@ -4,5 +4,7 @@ name: demo
 title: demo, a fixture of ci/tests/replay.sh
 version: 1.0.0
 level: project
+selector:
+  project: demo
 requires:
   openclinic: '>=0.1.0'

@@ -4,5 +4,7 @@ name: cnam
 title: cnam, a fixture of ci/tests/replay.sh
 version: 1.0.0
 level: layer
+selector:
+  insurer-cnam: "true"
 requires:
   openclinic: '>=0.1.0'
