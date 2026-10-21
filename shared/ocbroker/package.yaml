@@ -1,0 +1,8 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: ocbroker
+title: "ocbroker"
+version: 1.0.0
+level: project
+requires:
+  openclinic: ">=0.2.0"
