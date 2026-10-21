@@ -55,7 +55,7 @@ published tag never changes.
 |---|---|
 | Layout, versions and tags | L1-L8, V1-V5 against the base branch, T1 against the registry |
 | config lint | `config lint` from the pinned image: every package against its schemas and the closed lists, every pair of layers merged |
-| Replay on the release candidate | every package applied twice to a fresh database of the pinned image, in the smallest stacks a site could receive it in and in each base with all its layers: the first run must apply, the second must change nothing; between the two, `config export` of the stack against itself must give nothing back (the round trip: what the packages say came back unchanged). A pull request replays the stacks holding a package it adds or changes, and every stack when it touches `openclinic.yaml`, `ci/` or `.github/`, or removes a package; `main` replays every stack before publishing. Four stacks at a time, each on a MariaDB server of its own started from one snapshot |
+| Replay on the release candidate | every package applied twice to a fresh database of the pinned image, in the smallest stacks a site could receive it in and in each base with all its layers: the first run must apply, the second must change nothing; between the two, `config export` of the stack against itself must give nothing back (the round trip: what the packages say came back unchanged). A pull request replays the stacks holding a package it adds or changes, and every stack when it touches `openclinic.yaml`, `ci/` or `.github/`, or removes a package; `main` replays every stack before publishing. The stacks are split over four runners (`--shard k/4`): a hosted runner has two cores, which one stack keeps busy |
 | The tooling's own tests | `ci/tests` |
 
 On `main`, once all four are green, the job **Publish** builds and pushes each package whose tag the
@@ -84,7 +84,8 @@ python3 -m ci versions --base origin/main
 python3 -m ci tags
 python3 -m ci lint                       # the image of openclinic.yaml, or --image <ref>
 python3 -m ci replay --keep /tmp/reports # the seed, then about half a minute a stack
-python3 -m ci replay --jobs 4 --changed-from origin/main   # what a pull request runs
+python3 -m ci replay --changed-from origin/main --shard 0/4   # one of a pull request's four parts
+python3 -m ci replay --jobs 4            # n stacks at a time, each on a server of its own: for a machine with the cores
 python3 -m ci publish --dry-run          # what would be built
 python3 -m unittest discover -s ci/tests -t .
 ci/tests/publish.sh                      # a local registry and a BuildKit builder

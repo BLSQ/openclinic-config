@@ -53,10 +53,19 @@ jobs:
       - name: config lint, from the pinned release candidate
         run: python3 -m ci lint
 
-  replay:
-    name: Replay on the release candidate
+  # The replay, split over four runners: a hosted runner has two cores, which one stack already keeps
+  # busy, so stacks run side by side only on runners of their own (the SP5 spec, §7.1 and C6). A pull
+  # request replays the stacks holding a package it adds or changes, every stack when it touches the
+  # pin, the tooling or the workflows, or removes a package; main replays every stack before
+  # publishing. Each runner takes every fourth stack.
+  replay-shard:
+    name: Replay, part ${{ matrix.shard }} of 4
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,30 +74,39 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r ci/requirements.txt
-      # A pull request replays the stacks holding a package it adds or changes, every stack when it
-      # touches the pin, the tooling or the workflows, or removes a package; main replays every stack
-      # before publishing. Four at a time, the runner's cores (the SP5 spec, §7 and C6).
       - name: The stacks applied twice to a fresh database
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
+          SHARD: ${{ matrix.shard }}
         run: |
-          nproc; free -g; df -h /var/lib/docker
-          vmstat 15 > vmstat.log 2>&1 &
           if [ "$EVENT" = pull_request ]; then
-            python3 -m ci replay --keep replay-reports --jobs 2 --changed-from "origin/$BASE"
+            python3 -m ci replay --keep replay-reports --shard "$SHARD/4" --changed-from "origin/$BASE"
           else
-            python3 -m ci replay --keep replay-reports --jobs 4
+            python3 -m ci replay --keep replay-reports --shard "$SHARD/4"
           fi
-          kill %1 || true
-          cat vmstat.log
       - name: The reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: replay-reports
+          name: replay-reports-${{ matrix.shard }}
           path: replay-reports
           if-no-files-found: ignore
+
+  # The check branch protection requires, by its name: green when every part is.
+  replay:
+    name: Replay on the release candidate
+    if: always()
+    needs: [replay-shard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every part of the replay passed
+        env:
+          RESULT: ${{ needs.replay-shard.result }}
+        run: |
+          echo "the four parts of the replay: $RESULT"
+          [ "$RESULT" = success ]
 
   tooling:
     name: The tooling's own tests

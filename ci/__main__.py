@@ -4,9 +4,9 @@
   versions --base <ref>   the version rules V1-V5 against a git ref
   tags                    T1: no changed package's version already in the registry
   lint                    config lint, from the pinned image
-  replay [--keep <dir>] [--jobs <n>] [--changed-from <ref>]
+  replay [--keep <dir>] [--jobs <n>] [--changed-from <ref>] [--shard <k>/<n>]
                           every stack applied twice on the pinned image; n at a time; only the
-                          stacks a change touches
+                          stacks a change touches; one runner's part
   publish [--dry-run]     build and push what the registry lacks
   candidate               the highest OpenClinic tag, if above the pinned one
 
@@ -39,6 +39,7 @@ def main(argv=None):
             c.add_argument("--jobs", type=int, default=1, help="stacks replayed at a time, each on a server of its own")
             c.add_argument("--changed-from", metavar="REF",
                            help="only the stacks holding a package changed against this git ref (a pull request's base)")
+            c.add_argument("--shard", metavar="K/N", help="every N-th stack from the K-th: one of N runners")
     p = sub.add_parser("publish")
     p.add_argument("--registry", default="ghcr.io")
     p.add_argument("--namespace", default="blsq/openclinic-config")
@@ -74,7 +75,7 @@ def main(argv=None):
                 return lint.run(root, image)
             from . import replay
             return replay.run(root, image, keep=os.path.abspath(args.keep) if args.keep else None,
-                              jobs=args.jobs, changed_from=args.changed_from)
+                              jobs=args.jobs, changed_from=args.changed_from, shard_spec=args.shard)
         if args.command == "publish":
             from . import publish
             return publish.main(root, args)

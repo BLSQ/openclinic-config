@@ -91,6 +91,19 @@ class ScopeTest(unittest.TestCase):
         base, head = self.repos(lambda r: shutil.rmtree(os.path.join(r, "shared", "cnam")))
         self.assertEqual((None, "removed: cnam"), replay.scope(["shared/cnam/package.yaml"], base, head))
 
+    def test_shards_are_disjoint_and_cover_the_plan(self):
+        with TempRepo() as root:
+            country_fixture(root)
+            plan = stacks.plan(repo.load(root))
+        parts = [replay.shard(plan, f"{k}/3") for k in range(3)]
+        self.assertEqual(sorted(s.name for s in plan), sorted(s.name for p in parts for s in p))
+        self.assertEqual(len(plan), sum(len(p) for p in parts))
+        self.assertEqual([plan[1], plan[4]], replay.shard(plan, "1/3")[:2])
+        self.assertIs(plan, replay.shard(plan, None))
+        for bad in ("3/3", "1", "a/b", "-1/2"):
+            with self.assertRaisesRegex(ValueError, "expected k/n"):
+                replay.shard(plan, bad)
+
     def test_the_paths_are_the_change_against_the_merge_base(self):
         with tempfile.TemporaryDirectory() as root:
             git = lambda *a: subprocess.run(["git", "-C", root, "-c", "user.email=t@t", "-c", "user.name=t"] + list(a),

@@ -273,6 +273,18 @@ def select(stacks, names):
     return [s for s in stacks if any(p.name in names for p in s.packages())]
 
 
+def shard(stacks, spec):
+    """`k/n`: every n-th stack from the k-th, in the plan's order, so that n runners replay
+    disjoint parts whose union is the whole. None keeps every stack."""
+    if not spec:
+        return stacks
+    m = re.fullmatch(r"(\d+)/(\d+)", spec)
+    if not m or not 0 <= int(m.group(1)) < int(m.group(2)):
+        raise ValueError(f"--shard {spec}: expected k/n with 0 <= k < n")
+    k, n = int(m.group(1)), int(m.group(2))
+    return [s for i, s in enumerate(stacks) if i % n == k]
+
+
 def eligibility(packages, candidate):
     """The spec's §7.3: `requires` is checked against the release the candidate becomes, and a
     package it excludes is not replayed. A package the release accepts and the candidate itself
@@ -296,7 +308,7 @@ def eligibility(packages, candidate):
     return eligible, notes
 
 
-def run(root, image, keep=None, jobs=1, changed_from=None):
+def run(root, image, keep=None, jobs=1, changed_from=None, shard_spec=None):
     r = repo_mod.load(root)
     if r.problems:
         for p in r.problems:
@@ -326,6 +338,10 @@ def run(root, image, keep=None, jobs=1, changed_from=None):
             planned = select(planned, names)
             print(f"replay: {len(planned)} of {every} stack(s), the ones holding a package this change adds or changes "
                   f"against {changed_from}: " + (", ".join(sorted(names)) or "none"))
+    if shard_spec:
+        every = len(planned)
+        planned = shard(planned, shard_spec)
+        print(f"replay: shard {shard_spec}: {len(planned)} of {every} stack(s)")
     if not planned:
         print(f"replay: no stack to replay on {image}")
         return 0
