@@ -32,3 +32,6 @@
 /countries/tz/     @plmercereau
 /countries/ug/     @plmercereau
 /countries/zm/     @plmercereau
+
+# A central instance's base packages (OpenClinic's level `instance`), by kind.
+/instances/       @plmercereau

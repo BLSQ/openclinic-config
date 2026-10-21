@@ -5,13 +5,15 @@ import tempfile
 import yaml
 
 
-def manifest(name, level, version="1.0.0", base=None, country=None, requires=">=0.1.0", title=None):
+def manifest(name, level, version="1.0.0", base=None, country=None, requires=">=0.1.0", title=None, instance=None):
     m = {"apiVersion": "openclinic/v1alpha1", "kind": "Package", "name": name,
          "title": title or f"{name}, a test package", "version": version, "level": level}
     if base:
         m["base"] = base
     if country:
         m["country"] = country
+    if instance:
+        m["instance"] = instance
     m["requires"] = {"openclinic": requires}
     return m
 

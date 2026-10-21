@@ -11,6 +11,8 @@ from .semver import Version
 MANIFEST = "package.yaml"
 COUNTRIES = "countries"
 SHARED = "shared"
+# A central instance's base packages, by kind: instances/<kind>/<name>/ (OpenClinic's level `instance`).
+INSTANCES = "instances"
 # What is not searched for packages: git's own directory, and the tooling's fixtures (L1).
 NOT_PACKAGES = (".git", "ci/tests")
 
@@ -34,6 +36,7 @@ class Package:
     title: str = ""
     base: str = None
     country: str = None
+    instance: str = None          # an instance package's kind: mailbox, mpi or datacenter
     requires: str = None
     files: dict = field(default_factory=dict)   # relative path -> bytes
 
@@ -135,6 +138,7 @@ def read_package(root, rel):
     return Package(
         name=doc["name"], rel=rel, level=doc["level"], version_text=doc["version"],
         title=_text(doc, "title") or "", base=_text(doc, "base"), country=_text(doc, "country"),
+        instance=_text(doc, "instance"),
         requires=requires.get("openclinic") if isinstance(requires, dict) else None,
         files=_read_files(directory))
 

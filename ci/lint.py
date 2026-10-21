@@ -1,11 +1,11 @@
-"""`config lint` from the pinned image, on countries/ and shared/ alone (the spec, §6)."""
+"""`config lint` from the pinned image, on countries/, shared/ and instances/ alone (the spec, §6)."""
 import os
 import shutil
 import sys
 import tempfile
 
 from . import docker, repo as repo_mod
-from .repo import COUNTRIES, SHARED
+from .repo import COUNTRIES, INSTANCES, SHARED
 from .stacks import readable
 
 
@@ -16,7 +16,7 @@ def run(root, image):
     docker.ensure(image)
     with tempfile.TemporaryDirectory(prefix="openclinic-config-lint-") as stage:
         os.chmod(stage, 0o755)
-        for d in (COUNTRIES, SHARED):
+        for d in (COUNTRIES, SHARED, INSTANCES):
             if os.path.isdir(os.path.join(root, d)):
                 shutil.copytree(os.path.join(root, d), os.path.join(stage, d))
         readable(stage)
