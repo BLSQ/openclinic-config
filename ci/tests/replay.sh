@@ -16,10 +16,12 @@ check() { # expected exit, command, the repository, then the command's own optio
 has() { grep -q -- "$1" "$out/log" || fail "expected in the output: $1"; }
 
 # 1. Every level, both kinds the fixtures use: lint and the replay pass, every stack applied, exported
-#    against itself with nothing given back (the round trip), then unchanged.
+#    against itself with nothing given back (the round trip), then unchanged; two stacks at a time,
+#    each on a server of its own started from the one snapshot, as the checks run them.
 check 0 lint good
 has "6 package(s) read, 3 pair(s) of layers merged, 0 problem(s)"
-check 0 replay good --keep "$out/keep"
+check 0 replay good --keep "$out/keep" --jobs 2
+has "replay: 2 stacks at a time"
 has "replay: 6 stack(s), 0 failed"
 has "ok     xa-cs + its layers  \[xa + xa-cs | xa-pev | cnam\]"
 has "replay: the round trip, every stack exported against itself after its first run"

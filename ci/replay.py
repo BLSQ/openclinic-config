@@ -4,12 +4,15 @@ in between when the image has `config export` (the round trip, §7.4)."""
 import itertools
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from . import docker, repo as repo_mod, stacks as stacks_mod
 from .semver import Range, Version
@@ -31,13 +34,15 @@ def slug(name):
 
 class Database:
     """A MariaDB server on a network of its own, its data in a volume, and a snapshot volume taken
-    once the seed is loaded and migrated (the spec, §7.1)."""
+    once the seed is loaded and migrated (the spec, §7.1). The first server makes the snapshot;
+    the others, one per job, start from it and share it (`snapshot`)."""
 
-    def __init__(self, image, work):
+    def __init__(self, image, work, index=0, snapshot=None):
         self.image, self.work = image, work
-        tag = f"ocreplay-{os.getpid()}"
+        tag = f"ocreplay-{os.getpid()}" + (f"-{index}" if index else "")
         self.network, self.container = tag, tag + "-db"
-        self.data, self.snapshot = tag + "-data", tag + "-snapshot"
+        self.data = tag + "-data"
+        self.snapshot, self.owns_snapshot = (snapshot, False) if snapshot else (tag + "-snapshot", True)
 
     def _sql_ready(self, query):
         r = docker.run(["exec", self.container, "mariadb", "-h", "127.0.0.1", "-uroot", "-proot", "-N", "-e", query],
@@ -79,6 +84,14 @@ class Database:
         docker.run(["stop", "-t", "60", self.container], capture=True)
         self._copy(self.data, self.snapshot)
 
+    def attach(self):
+        """Another server for another job, on the snapshot the first one made; started by fresh()."""
+        docker.run(["network", "create", self.network], capture=True, quiet=True)
+        docker.run(["volume", "create", self.data], capture=True, quiet=True)
+        docker.run(["create", "--name", self.container, "--network", self.network, "--network-alias", "db",
+                    "-e", "MARIADB_ROOT_PASSWORD=root", "-v", f"{self.data}:/var/lib/mysql", MARIADB,
+                    "--lower-case-table-names=1", "--sql-mode=ANSI", "--max-connections=1000"], capture=True, quiet=True)
+
     def env(self):
         return ["-e", "DB_HOST=db", "-e", "DB_USER=openclinic", "-e", "DB_PASSWORD=0pen"]
 
@@ -97,7 +110,8 @@ class Database:
 
     def destroy(self):
         docker.run(["rm", "-f", self.container], check=False, capture=True, quiet=True)
-        docker.run(["volume", "rm", "-f", self.data, self.snapshot], check=False, capture=True, quiet=True)
+        volumes = [self.data] + ([self.snapshot] if self.owns_snapshot else [])
+        docker.run(["volume", "rm", "-f"] + volumes, check=False, capture=True, quiet=True)
         docker.run(["network", "rm", self.network], check=False, capture=True, quiet=True)
 
 
@@ -223,6 +237,54 @@ def apply_twice(db, image, version, root, stack, out, index=0, export=False):
             shutil.copytree(reports, os.path.join(out, f"{index:02d}-{slug(stack.name)}"), dirs_exist_ok=True)
 
 
+# what a pull request changes outside its packages and that every stack depends on: the candidate
+# pinned, the tooling, the workflows
+EVERYTHING = ("openclinic.yaml", "ci/", ".github/")
+
+
+def changed_paths(root, ref):
+    """The paths a change makes against `ref`, from their merge base, relative to `root`."""
+    r = subprocess.run(["git", "-C", root, "diff", "--name-only", "--relative", f"{ref}...HEAD"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise ValueError(f"cannot compare with {ref}: {r.stderr.strip()} (a checkout with its history: fetch-depth 0)")
+    return [l for l in r.stdout.splitlines() if l]
+
+
+def scope(paths, base, head):
+    """What a change needs replayed: (None, why) for every stack, or (names, None), the packages
+    it adds or changes. Every stack when it touches what they all depend on, or removes a package,
+    whose absence changes the wide stacks it was in."""
+    for path in paths:
+        if path == EVERYTHING[0] or path.startswith(EVERYTHING[1:]):
+            return None, f"{path} changed"
+    before = {p.name: p for p in base.packages}
+    removed = sorted(set(before) - {p.name for p in head.packages})
+    if removed:
+        return None, "removed: " + ", ".join(removed)
+    return {p.name for p in head.packages
+            if p.name not in before or before[p.name].content_hash() != p.content_hash()
+            or before[p.name].rel != p.rel}, None
+
+
+def select(stacks, names):
+    """The stacks that hold one of `names`: a country's change replays its types, its layers' wide
+    stacks and its projects too; a shared layer's, every wide stack."""
+    return [s for s in stacks if any(p.name in names for p in s.packages())]
+
+
+def shard(stacks, spec):
+    """`k/n`: every n-th stack from the k-th, in the plan's order, so that n runners replay
+    disjoint parts whose union is the whole. None keeps every stack."""
+    if not spec:
+        return stacks
+    m = re.fullmatch(r"(\d+)/(\d+)", spec)
+    if not m or not 0 <= int(m.group(1)) < int(m.group(2)):
+        raise ValueError(f"--shard {spec}: expected k/n with 0 <= k < n")
+    k, n = int(m.group(1)), int(m.group(2))
+    return [s for i, s in enumerate(stacks) if i % n == k]
+
+
 def eligibility(packages, candidate):
     """The spec's §7.3: `requires` is checked against the release the candidate becomes, and a
     package it excludes is not replayed. A package the release accepts and the candidate itself
@@ -246,7 +308,7 @@ def eligibility(packages, candidate):
     return eligible, notes
 
 
-def run(root, image, keep=None):
+def run(root, image, keep=None, jobs=1, changed_from=None, shard_spec=None):
     r = repo_mod.load(root)
     if r.problems:
         for p in r.problems:
@@ -266,6 +328,20 @@ def run(root, image, keep=None):
     planned = [s for s in planned if s is not None]
     for n in notes:
         print("replay: " + n)
+    if changed_from:
+        from .versions import load_ref
+        names, why = scope(changed_paths(root, changed_from), load_ref(root, changed_from), r)
+        if names is None:
+            print(f"replay: every stack, against {changed_from}: {why}")
+        else:
+            every = len(planned)
+            planned = select(planned, names)
+            print(f"replay: {len(planned)} of {every} stack(s), the ones holding a package this change adds or changes "
+                  f"against {changed_from}: " + (", ".join(sorted(names)) or "none"))
+    if shard_spec:
+        every = len(planned)
+        planned = shard(planned, shard_spec)
+        print(f"replay: shard {shard_spec}: {len(planned)} of {every} stack(s)")
     if not planned:
         print(f"replay: no stack to replay on {image}")
         return 0
@@ -273,23 +349,44 @@ def run(root, image, keep=None):
     export = has_export(image)
     print("replay: the round trip, every stack exported against itself after its first run" if export
           else f"replay: the round trip awaits a release with config export (SP4): {image} has none")
-    failures = 0
+    jobs = max(1, min(jobs, len(planned)))
+    failures = []
     with tempfile.TemporaryDirectory(prefix="openclinic-config-replay-", ignore_cleanup_errors=True) as work:
         os.chmod(work, 0o755)
-        db = Database(image, work)
+        dbs = [Database(image, work)]
         try:
             started = time.time()
-            db.create()
+            dbs[0].create()
             print(f"replay: the seed loaded and migrated in {time.time() - started:.0f} s")
-            for i, s in enumerate(planned, 1):
-                t = time.time()
-                why = apply_twice(db, image, str(release), root, s, keep, i, export)
-                status = "ok" if why is None else "FAILED"
-                print(f"replay: {status:6} {s.name}  [{s.describe()}]  {time.time() - t:.0f} s")
-                if why:
-                    failures += 1
-                    print(why)
+            for i in range(1, jobs):
+                dbs.append(Database(image, work, i, snapshot=dbs[0].snapshot))
+                dbs[-1].attach()
+            if jobs > 1:
+                print(f"replay: {jobs} stacks at a time, each on a server of its own started from the snapshot")
+            free, lock = queue.Queue(), threading.Lock()
+            for db in dbs:
+                free.put(db)
+
+            def one(i, s):
+                db = free.get()
+                try:
+                    t = time.time()
+                    why = apply_twice(db, image, str(release), root, s, keep, i, export)
+                finally:
+                    free.put(db)
+                with lock:
+                    print(f"replay: {'ok' if why is None else 'FAILED':6} {s.name}  [{s.describe()}]  {time.time() - t:.0f} s", flush=True)
+                    if why:
+                        failures.append(s.name)
+                        print(why, flush=True)
+
+            started = time.time()
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                for f in [pool.submit(one, i, s) for i, s in enumerate(planned, 1)]:
+                    f.result()
+            print(f"replay: the stacks replayed in {time.time() - started:.0f} s")
         finally:
-            db.destroy()
-    print(f"replay: {len(planned)} stack(s), {failures} failed")
+            for db in dbs:
+                db.destroy()
+    print(f"replay: {len(planned)} stack(s), {len(failures)} failed" + (": " + ", ".join(failures) if failures else ""))
     return 1 if failures else 0
