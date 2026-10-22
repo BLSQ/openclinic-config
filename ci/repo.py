@@ -36,7 +36,7 @@ class Package:
     title: str = ""
     base: str = None
     country: str = None
-    instance: str = None          # an instance package's kind: mailbox, mpi or datacenter
+    instance: str = None          # an instance package's kind: referral, mpi or datacenter
     requires: str = None
     files: dict = field(default_factory=dict)   # relative path -> bytes
 

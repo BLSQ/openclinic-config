@@ -1,6 +1,0 @@
-apiVersion: openclinic/v1alpha1
-kind: Modules
-# The mailbox between instances holds no patient record (the configuration design, D32): it offers
-# the relay's screens alone, and every other module is off.
-offer:
-  - exchange
