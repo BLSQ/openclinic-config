@@ -1,10 +1,10 @@
-"""The layout rules L1 to L8 (the spec, §4): where a package lives, and what its place says."""
+"""The layout rules L1 to L9 (the spec, §4): where a package lives, and what its place says."""
 import re
 
-from .repo import COUNTRIES, SHARED, Problem
+from .repo import COUNTRIES, INSTANCES, SHARED, Problem
 
-LEVELS = ("country", "type", "layer", "project", "site")
-RESERVED = (COUNTRIES, SHARED)
+LEVELS = ("country", "type", "layer", "project", "site", "instance")
+RESERVED = (COUNTRIES, SHARED, INSTANCES)
 
 
 def check(repo):
@@ -13,11 +13,17 @@ def check(repo):
     for p in repo.packages:
         parts = p.parts
         where = p.rel + "/package.yaml"
-        # L1: countries/<c>/<name>/ or shared/<name>/
-        placed = (len(parts) == 3 and parts[0] == COUNTRIES) or (len(parts) == 2 and parts[0] == SHARED)
+        # L1: countries/<c>/<name>/, shared/<name>/ or instances/<kind>/<name>/
+        placed = (len(parts) == 3 and parts[0] in (COUNTRIES, INSTANCES)) or (len(parts) == 2 and parts[0] == SHARED)
         if not placed:
-            problems.append(Problem("L1", where, "a package lives at countries/<country>/<name>/ or shared/<name>/"))
+            problems.append(Problem("L1", where, "a package lives at countries/<country>/<name>/, shared/<name>/ "
+                                    "or instances/<kind>/<name>/"))
             continue
+        # L9: instances/ holds a central instance's base packages, each under its kind, and nothing else
+        if parts[0] == INSTANCES and p.level != "instance":
+            problems.append(Problem("L9", where, f"instances/ holds instance packages, and this one is a {p.level}"))
+        elif p.level == "instance" and (parts[0] != INSTANCES or parts[1] != p.instance):
+            problems.append(Problem("L9", where, f"an instance package lives at instances/{p.instance}/{p.name}/"))
         # L2: the directory is the name
         if parts[-1] != p.name:
             problems.append(Problem("L2", where, f"the directory is '{parts[-1]}' and the manifest's name '{p.name}': the two must agree"))

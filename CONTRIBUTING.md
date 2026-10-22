@@ -1,9 +1,9 @@
 # Contributing a package
 
-1. **Choose its place** (README, L1-L8): a country's package at `countries/<c>/<c>/`; a facility
+1. **Choose its place** (README, L1-L9): a country's package at `countries/<c>/<c>/`; a facility
    type of it at `countries/<c>/<c>-<type>/` with `base: <c>`; a layer for one country beside them
    with `country: <c>`; a layer for every country, or a project several countries share, under
-   `shared/`.
+   `shared/`; a central instance's base package at `instances/<kind>/<name>/`, of level `instance`.
 2. **Write its manifest**:
 
    ```yaml
@@ -14,9 +14,14 @@
    version: 0.3.1
    level: type
    base: mr
+   selector:
+     facility-type: cs
    requires:
      openclinic: ">=0.2.0 <0.3.0"
    ```
+
+   Its `selector` names the clusters it applies to by their labels; a type's adds to its country's
+   and never repeats one.
 
    and its kinds' files, as OpenClinic's configuration design describes them (§5.1). A package names
    what the business names, a service, a profile, a module, a key, never a table or a local number.

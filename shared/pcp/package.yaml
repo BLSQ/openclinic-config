@@ -2,7 +2,9 @@ apiVersion: openclinic/v1alpha1
 kind: Package
 name: pcp
 title: "pcp"
-version: 1.0.0
+version: 1.0.1
 level: project
+selector:
+  project: pcp
 requires:
   openclinic: ">=0.2.0"

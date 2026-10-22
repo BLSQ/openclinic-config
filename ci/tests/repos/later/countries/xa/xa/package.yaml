@@ -4,5 +4,7 @@ name: xa
 title: xa, a fixture of ci/tests/replay.sh
 version: 1.0.0
 level: country
+selector:
+  country: xa
 requires:
   openclinic: '>=9.0.0'

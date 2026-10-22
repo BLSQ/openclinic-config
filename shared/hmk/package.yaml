@@ -2,7 +2,9 @@ apiVersion: openclinic/v1alpha1
 kind: Package
 name: hmk
 title: "hmk"
-version: 1.0.0
+version: 1.0.1
 level: project
+selector:
+  project: hmk
 requires:
   openclinic: ">=0.2.0"

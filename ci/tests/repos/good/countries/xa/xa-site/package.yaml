@@ -4,5 +4,7 @@ name: xa-site
 title: xa-site, a fixture of ci/tests/replay.sh
 version: 1.0.0
 level: site
+selector:
+  site: xa-site
 requires:
   openclinic: '>=0.1.0'

@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from ci import layout, repo
+from ci import layout, repo, stacks
 from ci.tests.helpers import TempRepo, config, write_package
 
 
@@ -53,6 +53,24 @@ class LayoutTest(unittest.TestCase):
             write_package(root, "packages", "bi", "country")
             write_package(root, "countries/mr/mr-cs", "nested", "layer")
             self.assertEqual(["L1"], rules(root))
+
+    def test_an_instance_package_lives_under_its_kind_and_is_planned_alone(self):
+        with TempRepo() as root:
+            good(root)
+            write_package(root, "instances/mailbox", "mailbox", "instance", instance="mailbox")
+            r = repo.load(root)
+            self.assertEqual([], layout.check(r))
+            self.assertEqual("mailbox", r.by_name("mailbox").instance)
+            self.assertIn(("mailbox", "mailbox"), [(s.name, s.describe()) for s in stacks.plan(r)])
+
+    def test_L9_instances_holds_instances_each_under_its_kind(self):
+        for where, name, level, kind in (("shared", "box", "instance", "mailbox"),
+                                         ("instances/mpi", "box", "instance", "mailbox"),
+                                         ("instances/mailbox", "demo2", "project", None)):
+            with TempRepo() as root:
+                good(root)
+                write_package(root, where, name, level, instance=kind)
+                self.assertEqual(["L9"], rules(root), (where, level))
 
     def test_L2_the_directory_is_the_name(self):
         with TempRepo() as root:

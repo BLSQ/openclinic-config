@@ -54,6 +54,9 @@ def plan(repo):
             stacks.append(Stack(f"{c.name} + {p.name}", [[c], [p]], p))
         elif p.level == "site":
             stacks.append(Stack(p.name, [[p]], p))
+    # A central instance's base package is its stack's base alone (OpenClinic's level `instance`).
+    for p in sorted((p for p in repo.packages if p.level == "instance"), key=lambda p: p.name):
+        stacks.append(Stack(p.name, [[p]], p))
     return stacks
 
 

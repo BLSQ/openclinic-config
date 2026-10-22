@@ -17,20 +17,27 @@ openclinic.yaml          the OpenClinic release candidate every check runs on
 countries/<c>/<c>/       a country package
 countries/<c>/<name>/    its facility types, its layers, its sites' and projects' packages
 shared/<name>/           layers for every country, and projects no country owns
+instances/<kind>/<name>/ a central instance's base package: its kind mailbox, mpi or datacenter
 ci/                      the tooling, and its tests
 ```
 
 | | Rule |
 |---|---|
 | L0 | A manifest is readable, its version a semantic version (no leading zero in a numeric pre-release identifier), and a package holds files only, never a symbolic link. |
-| L1 | A package lives at `countries/<c>/<name>/` or `shared/<name>/`; a `package.yaml` anywhere else, `ci/tests/` excepted, is refused. |
+| L1 | A package lives at `countries/<c>/<name>/`, `shared/<name>/` or `instances/<kind>/<name>/`; a `package.yaml` anywhere else, `ci/tests/` excepted, is refused. |
 | L2 | Its directory is its `name`. |
-| L3 | A name is unique in the repository, and is neither `countries` nor `shared`. |
+| L3 | A name is unique in the repository, and is none of `countries`, `shared` and `instances`. |
 | L4 | `countries/<c>/` holds the country package `c`, at `countries/<c>/<c>/`, and a country package lives nowhere else. |
 | L5 | A type lives under its country: its `base` is `c`. |
 | L6 | A layer under `countries/<c>/` names `country: c`; a layer under `shared/` names none. |
 | L7 | A project or a site package lives under either. |
 | L8 | A type's `base` and a layer's `country` name a country package of the repository. |
+| L9 | `instances/` holds packages of level `instance` alone, each under its `instance`, its kind: `instances/mailbox/<name>/`. Each is replayed alone, its stack's base. |
+
+Every manifest also carries a `selector`, the labels of the clusters it applies to, which EdgeHub's
+package catalog reads: `country: <c>` for a country, a type the labels it adds to its country's,
+`project: <name>` for a project, and `{}` for an instance's package, every cluster of its add-on.
+`config lint` refuses a manifest without one.
 
 ## Versions and tags
 

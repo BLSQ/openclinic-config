@@ -1,0 +1,10 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: mailbox
+title: "The mailbox between instances: the exchange module alone, no patient screen"
+version: 1.0.0
+level: instance
+instance: mailbox
+selector: {}
+requires:
+  openclinic: ">=0.2.0-rc.3"

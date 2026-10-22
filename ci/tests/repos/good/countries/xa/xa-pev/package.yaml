@@ -5,5 +5,7 @@ title: xa-pev, a fixture of ci/tests/replay.sh
 version: 1.0.0
 level: layer
 country: xa
+selector:
+  program-pev: "true"
 requires:
   openclinic: '>=0.1.0'
