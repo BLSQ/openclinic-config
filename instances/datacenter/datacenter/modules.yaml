@@ -1,0 +1,7 @@
+apiVersion: openclinic/v1alpha1
+kind: Modules
+# The datacenter's screens: the datacenter module, whose switch enableDatacenterMaster shows the
+# management of its groups, servers and users, and the statistics its sites post.
+offer:
+  - datacenter
+  - statistics

@@ -1,0 +1,9 @@
+apiVersion: openclinic/v1alpha1
+kind: Config
+# The MPI server is an OpenClinic instance of its own (the configuration design, D32): the edition
+# mpi opens its own login page, and isMPIServer makes it the index the sites' FHIR clients query.
+# It offers no module: the mpi module's switch, enableMPI, makes an instance a client of an MPI
+# server, which polls MPIServerURL (MedwanQuery's MPI check), and this one is the server.
+keys:
+  edition: "mpi"
+  isMPIServer: "1"
