@@ -1,0 +1,10 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: mpi
+title: "The MPI server: the master patient index of its sites, by its FHIR API"
+version: 1.0.0
+level: instance
+instance: mpi
+selector: {}
+requires:
+  openclinic: ">=0.2.0-rc.3"

@@ -1,0 +1,10 @@
+apiVersion: openclinic/v1alpha1
+kind: Package
+name: datacenter
+title: "The datacenter: the statistics and the monitoring its sites post, and its own screens"
+version: 1.0.0
+level: instance
+instance: datacenter
+selector: {}
+requires:
+  openclinic: ">=0.2.0-rc.3"

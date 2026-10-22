@@ -1,0 +1,7 @@
+apiVersion: openclinic/v1alpha1
+kind: Config
+# The datacenter is an OpenClinic instance of its own (the configuration design, D32): the edition
+# datacenter opens its statistics screens, which need the statistics module in the WAR (else
+# login.jsp falls back to the openclinic edition, OpenClinic's L145).
+keys:
+  edition: "datacenter"
