@@ -1,0 +1,6 @@
+apiVersion: openclinic/v1alpha1
+kind: Modules
+# The referral/counter-referral network's server holds no patient record (the configuration design,
+# D32): it offers the relay's screens alone, and every other module is off.
+offer:
+  - referral

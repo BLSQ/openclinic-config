@@ -57,16 +57,16 @@ class LayoutTest(unittest.TestCase):
     def test_an_instance_package_lives_under_its_kind_and_is_planned_alone(self):
         with TempRepo() as root:
             good(root)
-            write_package(root, "instances/mailbox", "mailbox", "instance", instance="mailbox")
+            write_package(root, "instances/referral", "referral", "instance", instance="referral")
             r = repo.load(root)
             self.assertEqual([], layout.check(r))
-            self.assertEqual("mailbox", r.by_name("mailbox").instance)
-            self.assertIn(("mailbox", "mailbox"), [(s.name, s.describe()) for s in stacks.plan(r)])
+            self.assertEqual("referral", r.by_name("referral").instance)
+            self.assertIn(("referral", "referral"), [(s.name, s.describe()) for s in stacks.plan(r)])
 
     def test_L9_instances_holds_instances_each_under_its_kind(self):
-        for where, name, level, kind in (("shared", "box", "instance", "mailbox"),
-                                         ("instances/mpi", "box", "instance", "mailbox"),
-                                         ("instances/mailbox", "demo2", "project", None)):
+        for where, name, level, kind in (("shared", "box", "instance", "referral"),
+                                         ("instances/mpi", "box", "instance", "referral"),
+                                         ("instances/referral", "demo2", "project", None)):
             with TempRepo() as root:
                 good(root)
                 write_package(root, where, name, level, instance=kind)
